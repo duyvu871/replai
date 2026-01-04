@@ -1,0 +1,66 @@
+name: Replai CI/CD
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # Continuous Integration - Runs on all pushes
+  ci:
+    name: Type Check & Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Type Check
+        run: npm run compile
+
+  # Continuous Deployment - Runs only on tags
+  release:
+    name: Build & Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Chrome Extension (Zip)
+        run: npm run zip
+
+      - name: Build Firefox Extension (Zip)
+        run: npm run zip:firefox
+
+      - name: List Artifacts
+        run: ls -R .output/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            .output/*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
