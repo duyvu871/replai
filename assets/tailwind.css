@@ -301,7 +301,7 @@
 }
 
 /* Compact Prose Styles - Extremely Tight */
-.prose {
+/* .prose {
     font-size: 13px !important;
     line-height: 1.4 !important;
     color: var(--foreground) !important;
@@ -339,4 +339,8 @@
 .prose strong {
     color: var(--foreground) !important;
     font-weight: 600 !important;
+} */
+
+.prose ul {
+  display: inline-block;
 }

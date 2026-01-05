@@ -2,7 +2,7 @@ import "~/assets/tailwind.css";
 import { createRoot } from "react-dom/client";
 import { ShadowDomProvider } from "@/components/shadow-dom-provider";
 import { PostTrigger } from "@/components/post-trigger";
-import { insertTextToInput, getFullPostContent } from "@/lib/facebook";
+import { insertTextToInput, extractCleanText, getFullPostContent } from "@/lib/facebook";
 
 export default defineContentScript({
     matches: ["https://www.facebook.com/*", "https://web.facebook.com/*"],
@@ -81,7 +81,6 @@ function initShadowTrigger(container: HTMLElement, optionsBtn: HTMLElement) {
     const handleGetText = async () => {
         if (!browser.runtime?.id) return "";
         const post = optionsBtn?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
-        console.log(post);
         if (post) {
             const content = await getFullPostContent(post as HTMLElement);
             console.log('content', content);
