@@ -28,6 +28,7 @@ export function TranslateTab({ onInsert }: TranslateTabProps) {
     const [copied, setCopied] = useState(false);
     const [targetLang, setTargetLang] = useState("Vietnamese");
     const [showLangs, setShowLangs] = useState(false);
+    const [finished, setFinished] = useState(false);
     const { speak, stop, isSpeaking } = useTextToSpeech();
 
     const result = responses.translate || geminiResult;
@@ -38,6 +39,7 @@ export function TranslateTab({ onInsert }: TranslateTabProps) {
         // But we don't store language in cache yet. Let's just re-generate if the user explicitly clicks.
 
         const text = await getPostText();
+        setFinished(false);
 
         const responseText = await generate("translate", text, { targetLang });
         if (responseText) {
@@ -48,6 +50,7 @@ export function TranslateTab({ onInsert }: TranslateTabProps) {
     const handleDiscard = () => {
         setResponse('translate', '');
         setResult("");
+        setFinished(false);
     };
 
     const handleCopy = () => {
@@ -146,7 +149,12 @@ export function TranslateTab({ onInsert }: TranslateTabProps) {
                                 </div>
                             ) : result ? (
                                 <div className="text-[12px] text-foreground leading-relaxed">
-                                    <Typewriter text={result} speed={5} />
+                                    <Typewriter
+                                        text={result}
+                                        speed={5}
+                                        animate={!finished}
+                                        onComplete={() => setFinished(true)}
+                                    />
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full py-2 opacity-30">

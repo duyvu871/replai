@@ -8,16 +8,32 @@ interface TypewriterProps {
     speed?: number;
     className?: string;
     onComplete?: () => void;
+    animate?: boolean;
 }
 
-export function Typewriter({ text, speed = 10, className, onComplete }: TypewriterProps) {
-    const [displayText, setDisplayText] = useState('');
-    const [currentIndex, setCurrentIndex] = useState(0);
+export function Typewriter({ text, speed = 10, className, onComplete, animate = true }: TypewriterProps) {
+    const [displayText, setDisplayText] = useState(animate ? '' : text);
+    const [currentIndex, setCurrentIndex] = useState(animate ? 0 : text.length);
 
     useEffect(() => {
+        if (!animate) {
+            setDisplayText(text);
+            setCurrentIndex(text.length);
+            return;
+        }
+
+        // Reset if text changes while animate is true
+        if (currentIndex > text.length || (currentIndex === text.length && displayText !== text)) {
+            setDisplayText('');
+            setCurrentIndex(0);
+        }
+    }, [text, animate]);
+
+    useEffect(() => {
+        if (!animate) return;
+
         if (currentIndex < text.length) {
             const timeout = setTimeout(() => {
-                // Type in chunks of 2-3 characters for a "faster" and more stable feeling
                 const nextIndex = Math.min(currentIndex + 3, text.length);
                 setDisplayText(text.slice(0, nextIndex));
                 setCurrentIndex(nextIndex);
@@ -27,7 +43,7 @@ export function Typewriter({ text, speed = 10, className, onComplete }: Typewrit
         } else if (onComplete) {
             onComplete();
         }
-    }, [currentIndex, text, speed, onComplete]);
+    }, [currentIndex, text, speed, onComplete, animate]);
 
     return (
         <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>

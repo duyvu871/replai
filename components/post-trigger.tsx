@@ -41,6 +41,7 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
     const [summaryCopied, setSummaryCopied] = useState(false);
 
     const [error, setError] = useState("");
+    const [finishedTasks, setFinishedTasks] = useState<Record<string, boolean>>({});
 
     // Model Selection State
     const [config, setConfig] = useState<AIConfig | null>(null);
@@ -124,6 +125,7 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
 
         setLoading(true);
         setError("");
+        setFinishedTasks(prev => ({ ...prev, [type]: false }));
 
         let context = "";
 
@@ -184,7 +186,7 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
                             <div className="p-1">
                                 <img src={Icon} alt="Replai Logo" className="w-6 h-6" />
                             </div>
-                            <h4 className="font-semibold text-sm tracking-tight text-foreground">Assistant</h4>
+                            {/* <h4 className="font-semibold text-sm tracking-tight text-foreground">Assistant</h4> */}
                         </div>
 
                         {config && (
@@ -199,7 +201,7 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
                                         <ChevronsUpDown className="w-3 h-3 opacity-50 shrink-0" />
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[300px] p-0 rounded-xl overflow-hidden border-border/50 shadow-xl" align="end" sideOffset={5}>
+                                <PopoverContent className="w-[300px] bg-background rounded-xl overflow-hidden border-border/50 shadow-xl" align="end" sideOffset={5}>
                                     <Command>
                                         <CommandInput placeholder="Search models..." className="h-9 text-xs" />
                                         <CommandList>
@@ -288,7 +290,12 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
                             {responses.reply && !replyLoading && (
                                 <div className="space-y-3 animate-in zoom-in-95 duration-200">
                                     <div className="rounded-xl bg-muted/50 p-3 text-xs text-foreground/90 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed border border-border/50 shadow-inner">
-                                        <Typewriter text={responses.reply} speed={5} />
+                                        <Typewriter
+                                            text={responses.reply}
+                                            speed={5}
+                                            animate={!finishedTasks.reply}
+                                            onComplete={() => setFinishedTasks(prev => ({ ...prev, reply: true }))}
+                                        />
                                     </div>
                                     <div className="flex justify-end gap-2">
                                         <Button
@@ -376,7 +383,12 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
                             {responses.summary && !summaryLoading && (
                                 <div className="space-y-3 animate-in zoom-in-95 duration-200">
                                     <div className="rounded-xl bg-muted/50 p-3 text-xs text-foreground/90 whitespace-pre-wrap max-h-[300px] overflow-y-auto leading-relaxed border border-border/50 shadow-inner">
-                                        <Typewriter text={responses.summary} speed={5} />
+                                        <Typewriter
+                                            text={responses.summary}
+                                            speed={5}
+                                            animate={!finishedTasks.summary}
+                                            onComplete={() => setFinishedTasks(prev => ({ ...prev, summary: true }))}
+                                        />
                                     </div>
                                     <div className="flex justify-end gap-2">
                                         <Button
