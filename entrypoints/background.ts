@@ -1,5 +1,7 @@
 import { GeminiService } from "@/lib/gemini";
-import { ExtensionMessage, GenerateRequestPayload, TaskType } from "@/types";
+import { OpenAIService } from "@/lib/openai";
+import { AIConfig, ExtensionMessage, FetchModelsPayload, GenerateRequestPayload, TaskType } from "@/types";
+import { AIService } from "@/lib/ai-service.interface";
 
 const PROMPTS: Record<TaskType, (payload: GenerateRequestPayload) => string> = {
   reply: (payload) => `
@@ -49,12 +51,27 @@ export default defineBackground(() => {
 
       (async () => {
         try {
-          const apiKey = await storage.getItem<string>("local:apiKey");
+          const aiConfig = await storage.getItem<AIConfig>("local:aiConfig");
 
-          if (!apiKey) {
+          // Fallback or Error if no config
+          if (!aiConfig || !aiConfig.apiKey) {
+            // Try legacy key support or fail
+            const legacyKey = await storage.getItem<string>("local:apiKey");
+            if (legacyKey) {
+              // Temporary fallback to Gemini
+              const promptGenerator = PROMPTS[payload.taskId];
+              if (!promptGenerator) throw new Error("Unknown task type");
+              const systemPrompt = promptGenerator(payload);
+
+              const gemini = new GeminiService(legacyKey, "gemini-2.5-flash", systemPrompt);
+              const result = await gemini.generateContent(payload.context);
+              sendResponse({ type: "GENERATE_SUCCESS", payload: { text: result } });
+              return;
+            }
+
             sendResponse({
               type: "GENERATE_ERROR",
-              payload: { error: "NO_API_KEY", message: "API Key not found. Please set it in settings." }
+              payload: { error: "NO_CONFIG", message: "AI Provider not configured. Please check settings." }
             });
             return;
           }
@@ -69,12 +86,29 @@ export default defineBackground(() => {
           }
 
           const systemPrompt = promptGenerator(payload);
-          const gemini = new GeminiService(apiKey);
+          let service: AIService;
 
-          // We treat context as part of the user content in GeminiService.generateContent
-          const result = await gemini.generateContent(systemPrompt, payload.context);
 
+
+          if (aiConfig.provider === "openai") {
+            service = new OpenAIService(
+              aiConfig.apiKey,
+              aiConfig.model || "gpt-3.5-turbo",
+              systemPrompt,
+              aiConfig.baseUrl
+            );
+          } else {
+            // Default to Gemini
+            service = new GeminiService(
+              aiConfig.apiKey,
+              aiConfig.model || "gemini-2.5-flash",
+              systemPrompt
+            );
+          }
+
+          const result = await service.generateContent(payload.context);
           sendResponse({ type: "GENERATE_SUCCESS", payload: { text: result } });
+
         } catch (error: any) {
           console.error("Background Generation Error:", error);
           sendResponse({
@@ -84,6 +118,36 @@ export default defineBackground(() => {
         }
       })();
 
+      return true; // Keep channel open
+    }
+
+    if (message.type === "FETCH_MODELS") {
+      const payload = message.payload as FetchModelsPayload;
+      (async () => {
+        try {
+          let service: AIService;
+          // Dummy values for init, we only need getModels
+          if (payload.provider === "openai") {
+            service = new OpenAIService(payload.apiKey, "dummy", "", payload.baseUrl);
+          } else {
+            service = new GeminiService(payload.apiKey, "dummy", "");
+          }
+
+          if (!service.getModels) {
+            sendResponse({ type: "GENERATE_SUCCESS", payload: { models: [] } }); // Or error
+            return;
+          }
+
+          const models = await service.getModels();
+          sendResponse({ type: "GENERATE_SUCCESS", payload: { models } });
+        } catch (error: any) {
+          console.error("Fetch Models Error:", error);
+          sendResponse({
+            type: "GENERATE_ERROR",
+            payload: { error: "FETCH_ERROR", message: error.message }
+          });
+        }
+      })();
       return true;
     }
 
@@ -93,5 +157,17 @@ export default defineBackground(() => {
     }
 
     return false;
+  });
+
+
+  (browser.action ?? browser.browserAction).onClicked.addListener(async () => {
+    const url = browser.runtime.getURL('/home.html');
+    const tabs = await browser.tabs.query({ url });
+
+    if (tabs.length > 0) {
+      browser.tabs.update(tabs[0].id!, { active: true });
+    } else {
+      browser.tabs.create({ url });
+    }
   });
 });

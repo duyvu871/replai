@@ -3,7 +3,10 @@ import tailwindcss from '@tailwindcss/vite';
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
-  modules: ['@wxt-dev/module-react'],
+  modules: [
+    '@wxt-dev/module-react',
+    '@wxt-dev/webextension-polyfill',
+  ],
   manifest: {
     permissions: ['storage'],
     icons: {
@@ -22,7 +25,7 @@ export default defineConfig({
         96: '/icon/icon-96.png',
         128: '/icon/icon-128.png',
       },
-      default_popup: 'popup.html',
+
     },
   },
   vite: () => ({

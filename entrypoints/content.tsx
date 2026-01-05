@@ -81,7 +81,6 @@ function initShadowTrigger(container: HTMLElement, optionsBtn: HTMLElement) {
     const handleGetText = async () => {
         if (!browser.runtime?.id) return "";
         const post = optionsBtn?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
-        console.log(post);
         if (post) {
             const content = await getFullPostContent(post as HTMLElement);
             console.log('content', content);
