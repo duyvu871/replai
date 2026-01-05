@@ -3,38 +3,41 @@ import { OpenAIService } from "@/lib/openai";
 import { AIConfig, ExtensionMessage, FetchModelsPayload, GenerateRequestPayload, TaskType } from "@/types";
 import { AIService } from "@/lib/ai-service.interface";
 
-const PROMPTS: Record<TaskType, (payload: GenerateRequestPayload) => string> = {
-  reply: (payload) => `
+const PROMPTS: Record<TaskType, (payload: any, aiConfig: AIConfig) => string> = {
+  reply: (payload, aiConfig) => `
         You are a social media assistant. 
-        User Context (Post/Comment): """${payload.context}"""
-        Specific Instruction: ${payload.userInput || "Write a natural reply"}
-
+        ${aiConfig.personalContext ? `User Persona: """${aiConfig.personalContext}"""` : ""}
+        
         Strict Guidelines:
         - Generate a strictly concise, single-paragraph response. 
         - DO NOT use Markdown lists (1., 2., -, *). 
         - DO NOT use multiple paragraphs. 
         - Keep it as a single block of text. No fluff, no introductory filler.
+        - Ensure the tone matches the User Persona if provided.
     `,
-  summary: (payload) => `
-        Summarize the main points of this post in Vietnamese.
-        User Context: """${payload.context}"""
+  summary: (payload, aiConfig) => `
+        You are a content summarization and analysis engine.
+        Target Language: ${payload.targetLang || "Vietnamese"}
+        ${aiConfig.personalContext ? `User Context/Preferences: """${aiConfig.personalContext}"""` : ""}
 
-        Strict Guidelines:
-        - Generate a strictly concise, single-paragraph summary. 
-        - DO NOT use Markdown lists. 
-        - DO NOT use multiple paragraphs. 
-        - Focus on the core message.
+        Guidelines:
+        - Return a structured summary and analysis in the target language.
+        - Use only information present in the input.
+        - Prioritize content relevance based on topic and intent.
+        - Avoid redundancy and low-value details.
+        - Prefer abstraction over narration.
+        - Output must strictly follow the defined structure and contain no extra commentary.
     `,
-  translate: (payload) => `
+  translate: (payload, aiConfig) => `
         You are a professional social media translator. 
         Target Language: ${payload.targetLang || "Vietnamese"}
-        User Context: """${payload.context}"""
+        ${aiConfig.personalContext ? `User Context/Preferences: """${aiConfig.personalContext}"""` : ""}
         
         Strict Guidelines:
         1. Preserve the original tone, intent, and cultural nuances.
         2. Maintain the linguistic structure appropriate for social media (informal but natural).
-        3. Contextual Translation: DO NOT translate technical terms, brand names, or slang that would lose meaning or sound unnatural in the target language. If a term is widely used in its original form within the target community, keep it.
-        4. If a word is untranslatable or its translation would be misleading, keep the original word in quotes or brackets.
+        3. Contextual Translation: DO NOT translate technical terms, brand names, or slang that would lose meaning or sound unnatural in the target language.
+        4. If a word is untranslatable, keep it in original form.
         5. Ensure the final output feels like it was written by a native speaker.
         6. Return ONLY the translated text. No lists, no explanations. Single block of text.
     `
@@ -58,13 +61,18 @@ export default defineBackground(() => {
             // Try legacy key support or fail
             const legacyKey = await storage.getItem<string>("local:apiKey");
             if (legacyKey) {
-              // Temporary fallback to Gemini
               const promptGenerator = PROMPTS[payload.taskId];
               if (!promptGenerator) throw new Error("Unknown task type");
-              const systemPrompt = promptGenerator(payload);
+              const systemPrompt = promptGenerator(payload, { personalContext: "" } as any);
 
-              const gemini = new GeminiService(legacyKey, "gemini-2.5-flash", systemPrompt);
-              const result = await gemini.generateContent(payload.context);
+              const gemini = new GeminiService(legacyKey, "gemini-1.5-flash", systemPrompt);
+
+              const userMessageContent = `
+                Content to process: """${payload.context}"""
+                Specific instructions: ${payload.userInput || "None"}
+              `;
+
+              const result = await gemini.generateContent(userMessageContent);
               sendResponse({ type: "GENERATE_SUCCESS", payload: { text: result } });
               return;
             }
@@ -85,10 +93,8 @@ export default defineBackground(() => {
             return;
           }
 
-          const systemPrompt = promptGenerator(payload);
+          const systemPrompt = promptGenerator(payload, aiConfig);
           let service: AIService;
-
-
 
           if (aiConfig.provider === "openai") {
             service = new OpenAIService(
@@ -98,15 +104,20 @@ export default defineBackground(() => {
               aiConfig.baseUrl
             );
           } else {
-            // Default to Gemini
             service = new GeminiService(
               aiConfig.apiKey,
-              aiConfig.model || "gemini-2.5-flash",
+              aiConfig.model || "gemini-1.5-flash",
               systemPrompt
             );
           }
 
-          const result = await service.generateContent(payload.context);
+          const userMessageContent = `
+            Content to process: """${payload.context}"""
+            Specific instructions: ${payload.userInput || "None"}
+            ${payload.targetLang ? `Target Language: ${payload.targetLang}` : ""}
+          `;
+
+          const result = await service.generateContent(userMessageContent);
           sendResponse({ type: "GENERATE_SUCCESS", payload: { text: result } });
 
         } catch (error: any) {

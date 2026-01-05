@@ -31,8 +31,6 @@ export function useGemini(): UseGeminiResult {
                 }
             });
 
-            console.log(response);
-
             if (response && response.type === "GENERATE_SUCCESS") {
                 const text = response.payload.text;
                 setResult(text);

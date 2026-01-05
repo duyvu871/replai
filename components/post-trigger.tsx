@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, Loader2, MessageSquare, Languages, FileText, ArrowRightLeft, Copy, Check } from "lucide-react";
+import { Sparkles, Loader2, MessageSquare, Languages, FileText, ArrowRightLeft, Copy, Check, ChevronsUpDown } from "lucide-react";
 import { TranslateTab } from "./tabs/translate-tab";
 import { PostProvider, usePost } from "./post-context";
 import { Skeleton } from "./ui/skeleton";
 import { Typewriter } from "./typewriter";
+import { AIConfig, ModelData } from "@/types";
+import { cn } from "@/lib/utils";
 import Icon from '@/assets/icon.svg';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
 
 interface PostTriggerProps {
     onInsert: (text: string) => void;
@@ -33,10 +36,84 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
     const [replyCopied, setReplyCopied] = useState(false);
 
     // Summary State
+    const [summaryPrompt, setSummaryPrompt] = useState("");
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [summaryCopied, setSummaryCopied] = useState(false);
 
     const [error, setError] = useState("");
+
+    // Model Selection State
+    const [config, setConfig] = useState<AIConfig | null>(null);
+    const [models, setModels] = useState<ModelData[]>([]);
+    const [loadingModels, setLoadingModels] = useState(false);
+    const [modelOpen, setModelOpen] = useState(false);
+
+    useEffect(() => {
+        loadConfig();
+    }, []);
+
+    const loadConfig = async () => {
+        // @ts-ignore
+        const currentConfig = await storage.getItem<AIConfig>("local:aiConfig");
+        if (currentConfig) {
+            setConfig(currentConfig);
+            if (currentConfig.apiKey) {
+                fetchModels(currentConfig);
+            }
+        }
+    };
+
+    const fetchModels = async (cfg: AIConfig) => {
+        setLoadingModels(true);
+        try {
+            const response = await browser.runtime.sendMessage({
+                type: "FETCH_MODELS",
+                payload: {
+                    provider: cfg.provider,
+                    apiKey: cfg.apiKey,
+                    baseUrl: cfg.baseUrl
+                }
+            });
+            if (response && response.type === "GENERATE_SUCCESS") {
+                setModels(response.payload.models || []);
+            }
+        } catch (e) {
+            console.error("Content script model fetch failed", e);
+        } finally {
+            setLoadingModels(false);
+        }
+    };
+
+    const handleModelChange = async (newModelId: string) => {
+        if (!config) return;
+        const newConfig = { ...config, model: newModelId };
+        setConfig(newConfig);
+        // @ts-ignore
+        await storage.setItem("local:aiConfig", newConfig);
+        setModelOpen(false);
+    };
+
+    const detectLanguage = () => {
+        try {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (tz.includes('Ho_Chi_Minh') || tz.includes('Saigon')) return 'Vietnamese';
+            if (tz.includes('Tokyo') || tz.includes('Osaka')) return 'Japanese';
+            if (tz.includes('Paris') || tz.includes('Brussels')) return 'French';
+            if (tz.includes('Seoul')) return 'Korean';
+            if (tz.includes('Shanghai') || tz.includes('Beijing') || tz.includes('Hong_Kong') || tz.includes('Taipei')) return 'Chinese';
+
+            const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+            if (locale.startsWith('vi')) return 'Vietnamese';
+            if (locale.startsWith('en')) return 'English';
+            if (locale.startsWith('ja')) return 'Japanese';
+            if (locale.startsWith('zh')) return 'Chinese';
+            if (locale.startsWith('fr')) return 'French';
+            if (locale.startsWith('ko')) return 'Korean';
+        } catch (e) {
+            console.error("Language detection failed", e);
+        }
+        return 'Vietnamese';
+    };
 
     const handleGenerate = async (
         type: "reply" | "translate" | "summary",
@@ -62,7 +139,8 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
                 payload: {
                     taskId: type,
                     context,
-                    userInput: type === "reply" ? customPrompt : undefined
+                    userInput: customPrompt,
+                    targetLang: detectLanguage()
                 }
             });
 
@@ -79,6 +157,7 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
             setLoading(false);
         }
     };
+
 
     const handleInsert = (text: string) => {
         onInsert(text);
@@ -105,8 +184,60 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
                             <div className="p-1">
                                 <img src={Icon} alt="Replai Logo" className="w-6 h-6" />
                             </div>
-                            <h4 className="font-semibold text-sm tracking-tight text-foreground">Replai Assistant</h4>
+                            <h4 className="font-semibold text-sm tracking-tight text-foreground">Assistant</h4>
                         </div>
+
+                        {config && (
+                            <Popover open={modelOpen} onOpenChange={setModelOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 px-2 flex items-center gap-1.5 hover:bg-muted text-[10px] font-bold text-muted-foreground transition-all rounded-lg max-w-[180px]"
+                                    >
+                                        <span className="truncate">{models.find(m => m.id === config.model)?.name || config.model}</span>
+                                        <ChevronsUpDown className="w-3 h-3 opacity-50 shrink-0" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0 rounded-xl overflow-hidden border-border/50 shadow-xl" align="end" sideOffset={5}>
+                                    <Command>
+                                        <CommandInput placeholder="Search models..." className="h-9 text-xs" />
+                                        <CommandList>
+                                            <CommandEmpty>No model found.</CommandEmpty>
+                                            <CommandGroup className="max-h-[250px] overflow-y-auto">
+                                                {models.map((m) => (
+                                                    <CommandItem
+                                                        key={m.id}
+                                                        value={m.id}
+                                                        onSelect={handleModelChange}
+                                                        className="flex flex-col items-start gap-0.5 p-2 px-3 cursor-pointer"
+                                                    >
+                                                        <div className="flex w-full items-center justify-between">
+                                                            <span className="font-bold text-[11px] tracking-tight truncate max-w-[200px]">
+                                                                {m.name || m.id}
+                                                            </span>
+                                                            {m.id === config.model && <Check className="h-3 w-3 text-primary shrink-0" />}
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {m.context_length && (
+                                                                <span className="text-[9px] font-semibold text-muted-foreground/60">
+                                                                    {Math.round(m.context_length / 1024)}K ctx
+                                                                </span>
+                                                            )}
+                                                            {m.pricing && (
+                                                                <span className="text-[9px] font-black text-green-600/60 dark:text-green-400/60">
+                                                                    {m.pricing.prompt === "0" ? "FREE" : `$${(parseFloat(m.pricing.prompt) * 1000000).toFixed(2)}/M`}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                        )}
                     </div>
 
                     <TabsList className="flex h-11 bg-muted/30 border-b border-border/50 gap-1 p-1 justify-around items-center">
@@ -209,18 +340,28 @@ function PostTriggerInner({ onInsert, onGetText }: PostTriggerProps) {
                         {/* Summary Tab */}
                         <TabsContent value="summary" className="mt-0 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             {!responses.summary && (
-                                <div className="flex flex-col items-center justify-center py-6 space-y-3">
-                                    <p className="text-[11px] text-muted-foreground text-center px-6">
-                                        Summary points in Vietnamese.
-                                    </p>
-                                    <Button
-                                        className="w-40 h-9 rounded-xl shadow-sm shadow-primary/10 text-[11px]"
-                                        onClick={() => handleGenerate("summary", setSummaryLoading)}
-                                        disabled={summaryLoading}
-                                    >
-                                        {summaryLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />}
-                                        {summaryLoading ? "Summarizing..." : "Summarize Now"}
-                                    </Button>
+                                <div className="space-y-3">
+                                    <div className="relative group">
+                                        <Input
+                                            placeholder="Analysis focus (e.g. key takeaways, sentiment...)"
+                                            value={summaryPrompt}
+                                            onChange={(e) => setSummaryPrompt(e.target.value)}
+                                            className="h-10 pl-3 pr-10 text-xs bg-muted/30 border-muted focus:bg-background transition-all rounded-xl"
+                                        />
+                                        <Button
+                                            size="icon"
+                                            onClick={() => handleGenerate("summary", setSummaryLoading, summaryPrompt)}
+                                            disabled={summaryLoading}
+                                            className="absolute right-1 top-1 h-8 w-8 rounded-lg shadow-sm shadow-primary/20 transition-all active:scale-95"
+                                        >
+                                            {summaryLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                        </Button>
+                                    </div>
+                                    <div className="flex flex-col items-center justify-center py-2 space-y-1">
+                                        <p className="text-[10px] text-muted-foreground text-center px-6">
+                                            Summarize and analyze based on detected language ({detectLanguage()}).
+                                        </p>
+                                    </div>
                                 </div>
                             )}
 

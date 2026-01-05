@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
     Select,
     SelectContent,
@@ -37,6 +38,7 @@ export function AIProviderSettings({ onSave, initialConfig }: AIProviderSettings
     const [apiKey, setApiKey] = useState(initialConfig?.apiKey || "");
     const [baseUrl, setBaseUrl] = useState(initialConfig?.baseUrl || "");
     const [model, setModel] = useState(initialConfig?.model || "");
+    const [personalContext, setPersonalContext] = useState(initialConfig?.personalContext || "");
     const [models, setModels] = useState<ModelData[]>([]);
     const [loadingModels, setLoadingModels] = useState(false);
     const [status, setStatus] = useState("");
@@ -95,7 +97,7 @@ export function AIProviderSettings({ onSave, initialConfig }: AIProviderSettings
             setStatus("Please fill in all fields");
             return;
         }
-        onSave({ provider, apiKey, baseUrl, model });
+        onSave({ provider, apiKey, baseUrl, model, personalContext });
         setStatus("Saved!");
         setTimeout(() => setStatus(""), 2000);
     };
@@ -216,6 +218,18 @@ export function AIProviderSettings({ onSave, initialConfig }: AIProviderSettings
                 {models.length === 0 && !loadingModels && apiKey && (
                     <p className="text-[10px] text-muted-foreground">Type a valid API Key to load models.</p>
                 )}
+            </div>
+            <div className="space-y-2">
+                <Label>Personal Context (About Me)</Label>
+                <Textarea
+                    value={personalContext}
+                    onChange={(e) => setPersonalContext(e.target.value)}
+                    placeholder="E.g. I am a software engineer, keep replies technical and concise."
+                    className="min-h-[100px] text-xs bg-muted/20"
+                />
+                <p className="text-[10px] text-muted-foreground italic">
+                    This context helps AI personalize its responses based on who you are.
+                </p>
             </div>
 
             {status && <p className="text-sm text-primary font-medium">{status}</p>}
